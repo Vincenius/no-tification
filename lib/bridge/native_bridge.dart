@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 
 import '../models/ai_settings.dart';
 import '../models/entry.dart';
+import '../models/feedback.dart';
 import '../models/native_status.dart';
 import '../models/rule.dart';
 import '../models/schedule.dart';
@@ -133,4 +134,33 @@ class NativeBridge {
             'isGroup': isGroup,
           }) ??
           const {});
+
+  // Feedback & stats
+
+  Future<FeedbackOptions?> getFeedback(Entry e) async {
+    final map = await _methods.invokeMapMethod<Object?, Object?>('getFeedback', {'id': e.id});
+    return map == null ? null : FeedbackOptions.fromMap(map);
+  }
+
+  /// Marks the entry as wrongly decided and applies the chosen suggestion (if any).
+  /// Returns the applied suggestion's label.
+  Future<String?> applyFeedback(Entry e, {String? suggestion}) =>
+      _call<String>('applyFeedback', {'id': e.id, 'suggestion': suggestion});
+
+  Future<Stats> getStats({int days = 7}) async =>
+      Stats.fromMap(await _methods.invokeMapMethod<Object?, Object?>('getStats', {'days': days}) ?? const {});
+
+  // Maintenance & health
+
+  Future<Maintenance> _maintenance(String method, [Map<String, Object?>? args]) async =>
+      Maintenance.fromMap(await _methods.invokeMapMethod<Object?, Object?>(method, args) ?? const {});
+
+  Future<Maintenance> getMaintenance() => _maintenance('getMaintenance');
+
+  Future<Maintenance> setRetentionDays(int days) => _maintenance('setRetentionDays', {'days': days});
+
+  /// Forces Android to rebind the notification listener.
+  Future<Maintenance> reconnectListener() => _maintenance('reconnectListener');
+
+  Future<void> openBatteryOptimizationSettings() => _call('openBatteryOptimizationSettings');
 }

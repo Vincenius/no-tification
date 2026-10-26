@@ -62,6 +62,14 @@ List<PermissionStep> permissionSteps(NativeStatus status, {required VoidCallback
       onGrant: bridge.openUrgentChannelSettings,
     ),
     PermissionStep(
+      title: 'Battery optimization',
+      explanation: 'Some phones stop background apps to save battery. Exempting Calm keeps it listening '
+          'and its digests on time. Calm only does work when a notification arrives.',
+      granted: status.batteryOptimizationIgnored,
+      required: false,
+      onGrant: bridge.openBatteryOptimizationSettings,
+    ),
+    PermissionStep(
       title: 'Exact alarms',
       explanation: 'Delivers digests exactly on time. Without it, Android may deliver them up to 10 minutes late.',
       granted: status.exactAlarms,

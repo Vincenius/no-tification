@@ -4,6 +4,7 @@ import '../bridge/native_bridge.dart';
 import '../models/entry.dart';
 import '../util/format.dart';
 import '../widgets/auto_refresh.dart';
+import '../widgets/feedback_sheet.dart';
 
 /// Every processed notification with its decision and reason, live.
 class LogScreen extends StatefulWidget {
@@ -91,6 +92,23 @@ class _LogTile extends StatelessWidget {
             Text(e.displayText, maxLines: 2, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 4),
             Text('${_sourceLabels[e.decisionSource] ?? e.decisionSource}: ${e.reason}', style: muted),
+            Align(
+              alignment: Alignment.centerRight,
+              child: e.feedback != null
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        e.feedback == 'SHOULD_BE_URGENT' ? 'Marked: should have been urgent' : 'Marked: should not have been urgent',
+                        style: muted?.copyWith(fontStyle: FontStyle.italic),
+                      ),
+                    )
+                  : TextButton.icon(
+                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                      onPressed: () => showFeedbackSheet(context, e),
+                      icon: Icon(e.urgent ? Icons.thumb_down_outlined : Icons.priority_high, size: 16),
+                      label: Text(e.urgent ? 'Should not have been urgent' : 'Should have been urgent'),
+                    ),
+            ),
           ],
         ),
       ),

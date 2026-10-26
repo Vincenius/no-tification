@@ -7,8 +7,9 @@ other apps' notifications.
 Flutter renders the UI. The whole pipeline (interception → classification → storage) runs natively
 in a Kotlin `NotificationListenerService`, so it works without the Flutter engine running.
 
-**Status:** milestone 3: storage, rules, Do Not Disturb silencing, scheduled digests and optional AI
-classification for messages no rule covers.
+**Status:** all four milestones are done: interception, rules, Do Not Disturb silencing, scheduled
+digests, optional AI classification, feedback that turns into rules, stats, history cleanup and a
+listener health check.
 
 ## How it works
 
@@ -22,6 +23,10 @@ classification for messages no rule covers.
    the original (with reply buttons) stays in the shade.
 4. At each digest time Calm posts one summary ("12 held notifications from 5 apps") that opens the
    digest screen.
+
+5. If a decision was wrong, tap *Should (not) have been urgent* in the Log (or long-press a message
+   in the Digest). Calm offers a matching rule: a VIP, the sender or conversation in that app, the
+   whole app, muting a group, or removing the rule that caused the decision.
 
 While Calm is on, it keeps its own Do Not Disturb mode active so nothing else can buzz before Calm
 has decided. Calls, repeat callers, alarms and media still come through. On Android 15+ this is a
@@ -53,7 +58,7 @@ App info → ⋮ → *Allow restricted settings*, then grant access.
 | Do Not Disturb access | Keep non-urgent notifications from buzzing | 2 |
 | "Override Do Not Disturb" on the Urgent channel | Let Calm's own alerts ring | 2 |
 | Exact alarms (optional) | Deliver digests on time, otherwise up to 10 min late | 2 |
-| Battery optimization exemption | Keep the service alive on aggressive OEMs | 4 |
+| Battery optimization exemption (optional) | Keep the service alive on aggressive OEMs | 4 |
 
 ## API key (optional)
 
@@ -73,6 +78,26 @@ sent.
 **Fail open:** if the API takes longer than 5 s, returns an error, refuses, answers with invalid
 JSON or reports a confidence below 0.6, the message is let through. The log shows these as
 "Fallback" with the reason.
+
+## Health check and fail-open
+
+Android binds the listener service itself, so it survives the app being swiped away and comes back
+after a reboot. Calm still checks the connection every 15 minutes while it's on, and also whenever
+the listener disconnects, the phone boots or the app opens:
+
+- Disconnected: Calm asks Android to rebind the listener.
+- Still disconnected after 2 minutes, or notification access revoked: Calm **pauses its Do Not
+  Disturb mode** and shows a "Calm paused silencing" notification. Without a listener, nothing would
+  come through otherwise. Silencing resumes by itself once the listener is back.
+- Settings → *Reconnect* forces a rebind by hand.
+
+On phones with aggressive battery management (Xiaomi, Huawei, OnePlus, some Samsungs), also allow
+Calm to autostart and exclude it from "sleeping apps" in the vendor's settings.
+
+## History
+
+The log keeps 7 days by default (Settings → *Keep history for*: 1–90 days). Cleanup runs at most
+every 6 hours. Held notifications you haven't seen yet are never deleted.
 
 ## Tests
 

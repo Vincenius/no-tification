@@ -21,6 +21,7 @@ class DigestAlarmReceiver : BroadcastReceiver() {
                 val released = graph.delivery.deliver()
                 SafeLog.d { "digest delivered, $released new items" }
                 graph.scheduler.reschedule(after = maxOf(now, scheduledFor ?: now))
+                graph.cleanupIfDue()
                 graph.events.changed()
             } finally {
                 pending.finish()
@@ -42,7 +43,10 @@ class SystemEventsReceiver : BroadcastReceiver() {
             try {
                 SafeLog.d { "system event ${intent.action}, rescheduling" }
                 graph.scheduler.reschedule()
-                if (intent.action == Intent.ACTION_BOOT_COMPLETED && graph.settings.enabled) graph.dnd.activate()
+                if (intent.action == Intent.ACTION_BOOT_COMPLETED && graph.settings.enabled && !graph.settings.silencingSuspended) {
+                    graph.dnd.activate()
+                }
+                graph.health.check()
             } finally {
                 pending.finish()
             }

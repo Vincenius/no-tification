@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../bridge/native_bridge.dart';
 import '../models/ai_settings.dart';
+import '../models/feedback.dart';
+import '../util/format.dart';
+import '../widgets/auto_refresh.dart';
+import 'rules_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -119,6 +123,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const _TestBox(),
+                const SizedBox(height: 12),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.rule),
+                    title: const Text('VIPs and rules'),
+                    subtitle: const Text('VIP contacts, apps to always hold, muted groups, custom rules'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const RulesScreen())),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const _MaintenanceCard(),
               ],
             ),
     );
@@ -314,6 +330,105 @@ class _TestBoxState extends State<_TestBox> {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// History retention and the listener health check.
+class _MaintenanceCard extends StatefulWidget {
+  const _MaintenanceCard();
+
+  @override
+  State<_MaintenanceCard> createState() => _MaintenanceCardState();
+}
+
+class _MaintenanceCardState extends State<_MaintenanceCard> with AutoRefresh {
+  final _bridge = NativeBridge.instance;
+  Maintenance? _m;
+  bool _reconnecting = false;
+
+  static const _retentionChoices = [1, 3, 7, 14, 30, 90];
+
+  @override
+  Future<void> reload() => _load(_bridge.getMaintenance());
+
+  Future<void> _load(Future<Maintenance> future) async {
+    final m = await future;
+    if (mounted) setState(() => _m = m);
+  }
+
+  Future<void> _reconnect() async {
+    setState(() => _reconnecting = true);
+    await _load(_bridge.reconnectListener());
+    // Rebinding takes a moment; look again shortly.
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await _load(_bridge.getMaintenance());
+    if (mounted) setState(() => _reconnecting = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = _m;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    if (m == null) return const SizedBox.shrink();
+
+    final healthy = m.notificationAccess && m.listenerConnected;
+    final healthText = !m.notificationAccess
+        ? 'Notification access is off'
+        : m.listenerConnected
+            ? 'Listener connected'
+            : 'Listener disconnected${m.listenerDisconnectedSince == null ? '' : ' since ${formatDayTime(m.listenerDisconnectedSince!)}'}';
+
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.history),
+            title: const Text('Keep history for'),
+            subtitle: Text(m.lastCleanupAt == null
+                ? 'Held notifications you haven\'t seen are always kept.'
+                : 'Last cleanup ${formatDayTime(m.lastCleanupAt!)}. Unseen held notifications are always kept.'),
+            trailing: DropdownButton<int>(
+              value: _retentionChoices.contains(m.retentionDays) ? m.retentionDays : null,
+              hint: Text('${m.retentionDays} days'),
+              items: [
+                for (final d in _retentionChoices) DropdownMenuItem(value: d, child: Text(d == 1 ? '1 day' : '$d days')),
+              ],
+              onChanged: (d) {
+                if (d != null) _load(_bridge.setRetentionDays(d));
+              },
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: Icon(healthy ? Icons.check_circle_outline : Icons.error_outline, color: healthy ? scheme.primary : scheme.error),
+            title: Text(healthText),
+            subtitle: Text([
+              if (m.silencingSuspended) 'Silencing is paused until it reconnects.',
+              if (m.lastHealthCheckAt != null) 'Checked ${formatDayTime(m.lastHealthCheckAt!)}. Checks run every 15 minutes while Calm is on.',
+            ].join(' ')),
+            trailing: TextButton(
+              onPressed: _reconnecting ? null : _reconnect,
+              child: Text(_reconnecting ? 'Reconnecting…' : 'Reconnect'),
+            ),
+          ),
+          ListTile(
+            leading: Icon(m.batteryOptimizationIgnored ? Icons.battery_charging_full : Icons.battery_alert_outlined),
+            title: Text(m.batteryOptimizationIgnored ? 'Battery optimization off for Calm' : 'Battery optimization is on'),
+            subtitle: m.batteryOptimizationIgnored ? null : const Text('Some phones then stop Calm in the background.'),
+            trailing: m.batteryOptimizationIgnored
+                ? null
+                : TextButton(
+                    onPressed: () async {
+                      await _bridge.openBatteryOptimizationSettings();
+                    },
+                    child: const Text('Fix'),
+                  ),
+          ),
+        ],
       ),
     );
   }

@@ -19,6 +19,9 @@ class Channels(private val context: Context, private val settings: Settings) {
     val urgentId: String get() = "urgent_v${settings.channelGeneration}"
     val digestId: String get() = "digest_v${settings.channelGeneration}"
 
+    /** Health warnings. Only posted while Calm's DND mode is paused, so no bypass needed. */
+    val statusId = "status"
+
     fun ensure() {
         val hasDndAccess = nm.isNotificationPolicyAccessGranted
         if (hasDndAccess && !settings.channelsCreatedWithDndAccess) {
@@ -28,6 +31,13 @@ class Channels(private val context: Context, private val settings: Settings) {
                 settings.channelGeneration += 1
             }
             settings.channelsCreatedWithDndAccess = true
+        }
+        if (nm.getNotificationChannel(statusId) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(statusId, "Calm status", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Warnings when Calm can't do its job, e.g. the listener disconnected"
+                },
+            )
         }
         if (nm.getNotificationChannel(urgentId) != null) return
 

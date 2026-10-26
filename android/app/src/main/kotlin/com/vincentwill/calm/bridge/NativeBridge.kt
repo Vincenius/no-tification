@@ -8,15 +8,22 @@ import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import com.vincentwill.calm.CalmGraph
 import com.vincentwill.calm.classify.ClassificationInput
+import com.vincentwill.calm.classify.DecisionStep
+import com.vincentwill.calm.classify.Feedback
+import com.vincentwill.calm.classify.FeedbackEntry
+import com.vincentwill.calm.classify.FeedbackOptions
+import com.vincentwill.calm.classify.FeedbackSuggestions
 import com.vincentwill.calm.classify.MatchType
 import com.vincentwill.calm.classify.Rule
 import com.vincentwill.calm.classify.RuleAction
 import com.vincentwill.calm.classify.RuleKind
 import com.vincentwill.calm.classify.RulesEngine
+import com.vincentwill.calm.data.AppCount
 import com.vincentwill.calm.data.DEFAULT_AI_MODEL
 import com.vincentwill.calm.data.NotificationEntity
 import com.vincentwill.calm.digest.NextDigestCalculator
@@ -139,6 +146,43 @@ class NativeBridge(private val activity: Activity, messenger: BinaryMessenger) :
                 }
             }
 
+            // Feedback & stats
+            "getFeedback" -> respond(result) {
+                val options = feedbackOptions(call.arg<Number>("id").toLong()) ?: return@respond null
+                mapOf(
+                    "feedback" to options.feedback.name,
+                    "note" to options.note,
+                    "suggestions" to options.suggestions.map { mapOf("id" to it.id, "label" to it.label, "detail" to it.detail) },
+                )
+            }
+            "applyFeedback" -> respond(result) {
+                val id = call.arg<Number>("id").toLong()
+                val options = feedbackOptions(id) ?: return@respond null
+                graph.db.notifications().setFeedback(id, options.feedback.name)
+                val suggestion = call.argument<String>("suggestion")?.let { sid -> options.suggestions.firstOrNull { it.id == sid } }
+                suggestion?.removeRuleId?.let { graph.rules.delete(it) }
+                suggestion?.addRule?.let { graph.rules.add(it) }
+                graph.events.changed()
+                suggestion?.label
+            }
+            "getStats" -> respond(result) { stats(call.argument<Int>("days") ?: 7) }
+
+            // Maintenance & health
+            "getMaintenance" -> respond(result) { maintenance() }
+            "setRetentionDays" -> respond(result) {
+                graph.settings.retentionDays = call.arg("days")
+                graph.cleanupIfDue(force = true)
+                maintenance()
+            }
+            "reconnectListener" -> respond(result) {
+                graph.health.rebind(force = true)
+                graph.health.check()
+                maintenance()
+            }
+            "openBatteryOptimizationSettings" -> launch(result) {
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${activity.packageName}"))
+            }
+
             // AI
             "getAiSettings" -> respond(result) { aiSettings() }
             "setApiKey" -> respond(result) {
@@ -257,6 +301,8 @@ class NativeBridge(private val activity: Activity, messenger: BinaryMessenger) :
             "todayHeld" to dao.countSince(startOfDay, urgent = false),
             "sdkInt" to Build.VERSION.SDK_INT,
             "aiActive" to graph.ai.isAvailable,
+            "batteryOptimizationIgnored" to batteryOptimizationIgnored(),
+            "silencingSuspended" to graph.settings.silencingSuspended,
         )
     }
 
@@ -331,6 +377,46 @@ class NativeBridge(private val activity: Activity, messenger: BinaryMessenger) :
         else -> null
     }
 
+    private fun batteryOptimizationIgnored(): Boolean =
+        activity.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(activity.packageName)
+
+    private suspend fun feedbackOptions(id: Long): FeedbackOptions? {
+        val e = graph.db.notifications().byId(id) ?: return null
+        val step = runCatching { DecisionStep.valueOf(e.decisionStep) }.getOrDefault(DecisionStep.FALLBACK)
+        return FeedbackSuggestions.forEntry(
+            FeedbackEntry(e.packageName, e.appLabel, e.title, e.sender, e.conversationTitle, e.isGroup, e.urgent, step, e.reason),
+            graph.rules.all(),
+        )
+    }
+
+    private suspend fun stats(days: Int): Map<String, Any?> {
+        val dao = graph.db.notifications()
+        val since = LocalDate.now().minusDays(days - 1L).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        fun apps(list: List<AppCount>) = list.map { mapOf("appLabel" to it.appLabel, "count" to it.count) }
+        val feedback = dao.countByFeedback(since).associate { it.key to it.count }
+        return mapOf(
+            "days" to days,
+            "passed" to dao.countSince(since, urgent = true),
+            "held" to dao.countSince(since, urgent = false),
+            "bySource" to dao.countBySource(since).associate { it.key to it.count },
+            "topHeld" to apps(dao.topApps(since, urgent = false, limit = 5)),
+            "topPassed" to apps(dao.topApps(since, urgent = true, limit = 5)),
+            "shouldHaveBeenUrgent" to (feedback[Feedback.SHOULD_BE_URGENT.name] ?: 0),
+            "shouldNotHaveBeenUrgent" to (feedback[Feedback.SHOULD_NOT_BE_URGENT.name] ?: 0),
+        )
+    }
+
+    private fun maintenance(): Map<String, Any?> = mapOf(
+        "retentionDays" to graph.settings.retentionDays,
+        "lastCleanupAt" to graph.settings.lastCleanupAt.takeIf { it > 0 },
+        "listenerConnected" to graph.events.listenerConnected.value,
+        "notificationAccess" to graph.health.hasAccess(),
+        "listenerDisconnectedSince" to graph.settings.listenerDisconnectedSince,
+        "silencingSuspended" to graph.settings.silencingSuspended,
+        "lastHealthCheckAt" to graph.settings.lastHealthCheckAt.takeIf { it > 0 },
+        "batteryOptimizationIgnored" to batteryOptimizationIgnored(),
+    )
+
     private fun NotificationEntity.toMap(): Map<String, Any?> = mapOf(
         "id" to id,
         "packageName" to packageName,
@@ -349,6 +435,7 @@ class NativeBridge(private val activity: Activity, messenger: BinaryMessenger) :
         "decisionStep" to decisionStep,
         "delivered" to delivered,
         "seen" to seen,
+        "feedback" to feedback,
     )
 
     private fun Rule.toMap(): Map<String, Any?> = mapOf(

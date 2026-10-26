@@ -13,11 +13,13 @@ import com.vincentwill.calm.data.SecretStore
 import com.vincentwill.calm.data.Settings
 import com.vincentwill.calm.digest.DigestDelivery
 import com.vincentwill.calm.digest.DigestScheduler
+import com.vincentwill.calm.health.HealthMonitor
 import com.vincentwill.calm.pipeline.NotificationPipeline
 import com.vincentwill.calm.pipeline.PipelineEvents
 import com.vincentwill.calm.silence.Channels
 import com.vincentwill.calm.silence.DndController
 import com.vincentwill.calm.silence.UrgentReposter
+import com.vincentwill.calm.util.SafeLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -43,6 +45,7 @@ class CalmGraph private constructor(context: Context) {
     val delivery = DigestDelivery(app, db.notifications(), channels)
     val secrets = SecretStore(app)
     val ai = AiClassifier(::aiBackend)
+    val health = HealthMonitor(app, settings, dnd, channels, events)
     val pipeline = NotificationPipeline(db.notifications(), rules, settings, events, ai, scope, ::isDialer)
 
     /** (api key, model) → client, rebuilt when either changes. */
@@ -71,11 +74,25 @@ class CalmGraph private constructor(context: Context) {
             dnd.deactivate()
         }
         settings.enabled = enabled
+        health.reset()
         events.changed()
         return enabled
     }
 
+    /** Deletes history past the retention period, at most every 6 hours unless [force]d. */
+    suspend fun cleanupIfDue(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - settings.lastCleanupAt < CLEANUP_INTERVAL_MS) return
+        settings.lastCleanupAt = now
+        val deleted = db.notifications().deleteOlderThan(now - settings.retentionDays * DAY_MS)
+        SafeLog.d { "cleanup removed $deleted entries" }
+        if (deleted > 0) events.changed()
+    }
+
     companion object {
+        private const val DAY_MS = 24 * 60 * 60_000L
+        private const val CLEANUP_INTERVAL_MS = 6 * 60 * 60_000L
+
         @Volatile
         private var instance: CalmGraph? = null
 
@@ -91,6 +108,8 @@ class CalmApplication : Application() {
         graph.scope.launch {
             graph.schedule.seedDefaultsIfNeeded()
             graph.scheduler.reschedule()
+            graph.health.check()
+            graph.cleanupIfDue()
         }
     }
 }

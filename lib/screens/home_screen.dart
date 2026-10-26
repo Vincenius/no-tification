@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../bridge/native_bridge.dart';
+import '../models/feedback.dart';
 import '../models/native_status.dart';
 import '../util/format.dart';
 import '../widgets/auto_refresh.dart';
@@ -20,12 +21,18 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with AutoRefresh {
   final _bridge = NativeBridge.instance;
   NativeStatus? _status;
+  Stats? _stats;
   bool _busy = false;
 
   @override
   Future<void> reload() async {
-    final status = await _bridge.getStatus();
-    if (mounted) setState(() => _status = status);
+    final (status, stats) = await (_bridge.getStatus(), _bridge.getStats()).wait;
+    if (mounted) {
+      setState(() {
+        _status = status;
+        _stats = stats;
+      });
+    }
   }
 
   Future<void> _toggle(bool on) async {
@@ -80,6 +87,17 @@ class _HomeScreenState extends State<HomeScreen> with AutoRefresh {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 children: [
                   _MasterSwitch(status: status, busy: _busy, onChanged: _toggle),
+                  if (status.enabled && status.silencingSuspended)
+                    _Banner(
+                      icon: Icons.notifications_paused_outlined,
+                      text: 'Silencing is paused: Calm lost its connection to your notifications, so it turned '
+                          'Do Not Disturb off to be safe. It resumes on its own once reconnected. Tap to reconnect now.',
+                      error: true,
+                      onTap: () async {
+                        await _bridge.reconnectListener();
+                        await reload();
+                      },
+                    ),
                   if (!status.listenerConnected && status.notificationAccess)
                     _Banner(
                       icon: Icons.link_off,
@@ -102,6 +120,10 @@ class _HomeScreenState extends State<HomeScreen> with AutoRefresh {
                   _HeldCard(status: status, onOpen: widget.onOpenDigest, onDeliverNow: _deliverNow),
                   const SizedBox(height: 8),
                   _TodayCard(status: status),
+                  if (_stats != null && _stats!.total > 0) ...[
+                    const SizedBox(height: 8),
+                    _WeekCard(stats: _stats!),
+                  ],
                 ],
               ),
             ),
@@ -224,6 +246,87 @@ class _TodayCard extends StatelessWidget {
             Row(children: [stat(status.todayPassed, 'passed through'), stat(status.todayHeld, 'held')]),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _WeekCard extends StatelessWidget {
+  const _WeekCard({required this.stats});
+
+  final Stats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final s = stats;
+    final heldShare = s.total == 0 ? 0 : (s.held * 100 / s.total).round();
+    String count(String key) => '${s.bySource[key] ?? 0}';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Last ${s.days} days', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Text('${s.total} notifications · $heldShare % held', style: theme.textTheme.bodyLarge),
+            const SizedBox(height: 4),
+            Text('Decided by rules ${count('RULE')} · AI ${count('AI')} · fallback ${count('FALLBACK')}', style: muted),
+            if (s.shouldHaveBeenUrgent + s.shouldNotHaveBeenUrgent > 0)
+              Text(
+                'Corrections: ${s.shouldHaveBeenUrgent} should have come through, '
+                '${s.shouldNotHaveBeenUrgent} should have been held',
+                style: muted,
+              ),
+            if (s.topHeld.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('Held most', style: theme.textTheme.labelLarge),
+              for (final a in s.topHeld) _AppRow(label: a.appLabel, count: a.count, max: s.topHeld.first.count),
+            ],
+            if (s.topPassed.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('Came through most', style: theme.textTheme.labelLarge),
+              for (final a in s.topPassed) _AppRow(label: a.appLabel, count: a.count, max: s.topPassed.first.count),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One row of a tiny horizontal bar chart.
+class _AppRow extends StatelessWidget {
+  const _AppRow({required this.label, required this.count, required this.max});
+
+  final String label;
+  final int count;
+  final int max;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          SizedBox(width: 96, child: Text(label, overflow: TextOverflow.ellipsis)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: max == 0 ? 0 : count / max,
+                minHeight: 8,
+                backgroundColor: scheme.surfaceContainerHighest,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(width: 32, child: Text('$count', textAlign: TextAlign.end)),
+        ],
       ),
     );
   }

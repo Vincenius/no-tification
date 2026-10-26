@@ -33,6 +33,7 @@ class CalmListenerService : NotificationListenerService(), NotificationActions {
             for (n in queue) {
                 try {
                     graph.pipeline.process(n, this@CalmListenerService)
+                    graph.cleanupIfDue()
                 } catch (e: Exception) {
                     SafeLog.w({ "pipeline failed for ${n.packageName}" }, e)
                 }
@@ -48,11 +49,14 @@ class CalmListenerService : NotificationListenerService(), NotificationActions {
     override fun onListenerConnected() {
         SafeLog.d { "listener connected" }
         graph.events.setListenerConnected(true)
+        // Restores silencing if a disconnect had paused it.
+        graph.health.check()
     }
 
     override fun onListenerDisconnected() {
         SafeLog.d { "listener disconnected, requesting rebind" }
         graph.events.setListenerConnected(false)
+        graph.health.onListenerDisconnected()
         requestRebind(ComponentName(this, CalmListenerService::class.java))
     }
 

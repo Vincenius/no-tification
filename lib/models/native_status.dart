@@ -13,6 +13,8 @@ class NativeStatus {
     required this.todayHeld,
     required this.sdkInt,
     required this.aiActive,
+    required this.batteryOptimizationIgnored,
+    required this.silencingSuspended,
   });
 
   final bool notificationAccess;
@@ -28,12 +30,16 @@ class NativeStatus {
   final int todayHeld;
   final int sdkInt;
   final bool aiActive;
+  final bool batteryOptimizationIgnored;
+
+  /// The listener was gone too long, so Calm paused its DND mode (fail open).
+  final bool silencingSuspended;
 
   /// Without these Calm can't work at all.
   bool get requiredGranted => notificationAccess && dndAccess && postNotifications;
 
   /// Calm works without these, but worse.
-  bool get recommendedGranted => urgentBypassesDnd && exactAlarms;
+  bool get recommendedGranted => urgentBypassesDnd && exactAlarms && batteryOptimizationIgnored;
 
   factory NativeStatus.fromMap(Map<Object?, Object?> map) {
     final next = map['nextDigestAt'] as int?;
@@ -51,6 +57,8 @@ class NativeStatus {
       todayHeld: map['todayHeld'] as int? ?? 0,
       sdkInt: map['sdkInt'] as int? ?? 0,
       aiActive: map['aiActive'] as bool? ?? false,
+      batteryOptimizationIgnored: map['batteryOptimizationIgnored'] as bool? ?? false,
+      silencingSuspended: map['silencingSuspended'] as bool? ?? false,
     );
   }
 }

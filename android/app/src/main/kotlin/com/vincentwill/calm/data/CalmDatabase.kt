@@ -1,6 +1,7 @@
 package com.vincentwill.calm.data
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -44,6 +45,8 @@ data class NotificationEntity(
     val delivered: Boolean,
     /** Held items leave the digest screen once seen. */
     val seen: Boolean = false,
+    /** [com.vincentwill.calm.classify.Feedback] name, if the user said the decision was wrong. */
+    val feedback: String? = null,
 )
 
 @Entity(tableName = "rules")
@@ -66,6 +69,8 @@ data class DigestTimeEntity(
 )
 
 data class AppCount(val packageName: String, val appLabel: String, val count: Int)
+
+data class KeyCount(val key: String, val count: Int)
 
 @Dao
 interface NotificationDao {
@@ -102,7 +107,23 @@ interface NotificationDao {
     )
     suspend fun appsSeen(): List<AppCount>
 
-    @Query("DELETE FROM notifications WHERE receivedAt < :before")
+    @Query("UPDATE notifications SET feedback = :feedback WHERE id = :id")
+    suspend fun setFeedback(id: Long, feedback: String?)
+
+    @Query("SELECT decisionSource AS `key`, COUNT(*) AS count FROM notifications WHERE receivedAt >= :since GROUP BY decisionSource")
+    suspend fun countBySource(since: Long): List<KeyCount>
+
+    @Query("SELECT feedback AS `key`, COUNT(*) AS count FROM notifications WHERE receivedAt >= :since AND feedback IS NOT NULL GROUP BY feedback")
+    suspend fun countByFeedback(since: Long): List<KeyCount>
+
+    @Query(
+        "SELECT packageName, appLabel, COUNT(*) AS count FROM notifications " +
+            "WHERE receivedAt >= :since AND urgent = :urgent GROUP BY packageName ORDER BY count DESC LIMIT :limit",
+    )
+    suspend fun topApps(since: Long, urgent: Boolean, limit: Int): List<AppCount>
+
+    /** Held items that were never seen are kept: deleting them would lose notifications silently. */
+    @Query("DELETE FROM notifications WHERE receivedAt < :before AND NOT (urgent = 0 AND seen = 0)")
     suspend fun deleteOlderThan(before: Long): Int
 }
 
@@ -148,8 +169,9 @@ interface DigestTimeDao {
 
 @Database(
     entities = [NotificationEntity::class, RuleEntity::class, DigestTimeEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 abstract class CalmDatabase : RoomDatabase() {
     abstract fun notifications(): NotificationDao

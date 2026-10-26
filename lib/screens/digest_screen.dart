@@ -4,6 +4,7 @@ import '../bridge/native_bridge.dart';
 import '../models/entry.dart';
 import '../util/format.dart';
 import '../widgets/auto_refresh.dart';
+import '../widgets/feedback_sheet.dart';
 
 /// Everything held and not yet seen, grouped by app → conversation, newest first.
 class DigestScreen extends StatefulWidget {
@@ -93,6 +94,7 @@ class _AppCard extends StatelessWidget {
             for (final e in entries)
               InkWell(
                 onTap: () => onTap(e),
+                onLongPress: () => showFeedbackSheet(context, e),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   child: Row(
@@ -126,6 +128,12 @@ class _Empty extends StatelessWidget {
               Icon(Icons.spa_outlined, size: 48, color: Theme.of(context).colorScheme.outline),
               const SizedBox(height: 12),
               const Text('Nothing held. All calm.', textAlign: TextAlign.center),
+              const SizedBox(height: 4),
+              Text(
+                'Tip: long-press a held message if it should have come through.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ],
           ),
         ),

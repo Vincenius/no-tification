@@ -36,6 +36,29 @@ class Settings(context: Context) {
         get() = prefs.getString("ai_model", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_AI_MODEL
         set(value) = prefs.edit { putString("ai_model", value.trim().ifEmpty { DEFAULT_AI_MODEL }) }
 
+    /** History older than this is deleted (unseen held items excepted). */
+    var retentionDays: Int
+        get() = prefs.getInt("retention_days", 7)
+        set(value) = prefs.edit { putInt("retention_days", value.coerceIn(1, 365)) }
+
+    var lastCleanupAt: Long
+        get() = prefs.getLong("last_cleanup_at", 0)
+        set(value) = prefs.edit { putLong("last_cleanup_at", value) }
+
+    /** True while silencing is paused because the listener is gone (fail open). */
+    var silencingSuspended: Boolean
+        get() = prefs.getBoolean("silencing_suspended", false)
+        set(value) = prefs.edit { putBoolean("silencing_suspended", value) }
+
+    /** When the health check first saw the listener disconnected; survives process restarts. */
+    var listenerDisconnectedSince: Long?
+        get() = prefs.getLong("listener_disconnected_since", -1).takeIf { it >= 0 }
+        set(value) = prefs.edit { putLong("listener_disconnected_since", value ?: -1) }
+
+    var lastHealthCheckAt: Long
+        get() = prefs.getLong("last_health_check_at", 0)
+        set(value) = prefs.edit { putLong("last_health_check_at", value) }
+
     var defaultsSeeded: Boolean
         get() = prefs.getBoolean("defaults_seeded", false)
         set(value) = prefs.edit { putBoolean("defaults_seeded", value) }

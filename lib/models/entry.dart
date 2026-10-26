@@ -18,6 +18,7 @@ class Entry {
     required this.decisionStep,
     required this.delivered,
     required this.seen,
+    this.feedback,
   });
 
   final int id;
@@ -42,6 +43,9 @@ class Entry {
   final bool delivered;
   final bool seen;
 
+  /// SHOULD_BE_URGENT / SHOULD_NOT_BE_URGENT once the user corrected the decision.
+  final String? feedback;
+
   /// Who or what this is about, for grouping and display.
   String get conversation => conversationTitle ?? title ?? appLabel;
 
@@ -65,6 +69,7 @@ class Entry {
         decisionStep: map['decisionStep'] as String? ?? 'FALLBACK',
         delivered: map['delivered'] as bool? ?? false,
         seen: map['seen'] as bool? ?? false,
+        feedback: map['feedback'] as String?,
       );
 }
 

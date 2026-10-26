@@ -31,28 +31,28 @@ List<PermissionStep> permissionSteps(NativeStatus status, {required VoidCallback
   return [
     PermissionStep(
       title: 'Notification access',
-      explanation: 'Calm reads incoming notifications to decide which ones are urgent. Everything '
+      explanation: 'no-tification reads incoming notifications to decide which ones are urgent. Everything '
           'stays on this phone. Android shows a strong warning here. That is expected for this kind of app.',
       granted: status.notificationAccess,
       onGrant: bridge.openNotificationAccessSettings,
     ),
     PermissionStep(
       title: 'Post notifications',
-      explanation: 'Calm shows urgent notifications itself, plus one summary at each digest time.',
+      explanation: 'no-tification shows urgent notifications itself, plus one summary at each digest time.',
       granted: status.postNotifications,
       onGrant: () async => onPostNotificationsTapped(),
     ),
     PermissionStep(
       title: 'Do Not Disturb access',
-      explanation: 'Android plays the sound before Calm can react. So while Calm is on, it runs its own '
-          'Do Not Disturb mode: calls, alarms and Calm itself still come through, everything else is '
-          'quiet until Calm decides. Turning Calm off restores your previous setup.',
+      explanation: 'Android plays the sound before no-tification can react. So while no-tification is on, it runs its own '
+          'Do Not Disturb mode: calls, alarms and no-tification itself still come through, everything else is '
+          'quiet until no-tification decides. Turning no-tification off restores your previous setup.',
       granted: status.dndAccess,
       onGrant: bridge.openDndAccessSettings,
     ),
     PermissionStep(
-      title: 'Let Calm through Do Not Disturb',
-      explanation: 'Urgent notifications are shown on Calm\'s "Urgent" channel, which must be allowed to '
+      title: 'Let no-tification through Do Not Disturb',
+      explanation: 'Urgent notifications are shown on no-tification\'s "Urgent" channel, which must be allowed to '
           'override Do Not Disturb. If the switch below shows as not granted, turn on "Override Do Not '
           'Disturb" for the Urgent channel.',
       granted: status.urgentBypassesDnd,
@@ -63,8 +63,8 @@ List<PermissionStep> permissionSteps(NativeStatus status, {required VoidCallback
     ),
     PermissionStep(
       title: 'Battery optimization',
-      explanation: 'Some phones stop background apps to save battery. Exempting Calm keeps it listening '
-          'and its digests on time. Calm only does work when a notification arrives.',
+      explanation: 'Some phones stop background apps to save battery. Exempting no-tification keeps it listening '
+          'and its digests on time. no-tification only does work when a notification arrives.',
       granted: status.batteryOptimizationIgnored,
       required: false,
       onGrant: bridge.openBatteryOptimizationSettings,
@@ -123,11 +123,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             padding: const EdgeInsets.fromLTRB(16, 32, 16, 24),
             children: [
               if (widget.onDone == null) ...[
-                Text('Welcome to Calm', style: theme.textTheme.headlineMedium),
+                Text('Welcome to no-tification', style: theme.textTheme.headlineMedium),
                 const SizedBox(height: 8),
                 Text(
                   'Urgent notifications come through right away. Everything else waits for your next digest. '
-                  'Calm needs a few permissions to do that.',
+                  'no-tification needs a few permissions to do that.',
                   style: theme.textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 24),

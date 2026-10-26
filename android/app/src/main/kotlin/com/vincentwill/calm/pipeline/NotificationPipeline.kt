@@ -13,6 +13,7 @@ import com.vincentwill.calm.data.Settings
 import com.vincentwill.calm.listener.CapturedNotification
 import com.vincentwill.calm.listener.Deduplicator
 import com.vincentwill.calm.listener.IncomingItem
+import com.vincentwill.calm.util.SafeLog
 import java.time.ZonedDateTime
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -38,7 +39,13 @@ class NotificationPipeline(
     scope: CoroutineScope,
     private val isDialer: (String) -> Boolean,
 ) {
-    private class Pending(val n: CapturedNotification, val item: IncomingItem, val actions: NotificationActions)
+    /** [updateHasUrgent]: a rule let another message of the same update through. */
+    private class Pending(
+        val n: CapturedNotification,
+        val item: IncomingItem,
+        val actions: NotificationActions,
+        val updateHasUrgent: Boolean,
+    )
 
     /** Notification key → whether everything in its last decided update was held. */
     private val lastHeld = ConcurrentHashMap<String, Boolean>()
@@ -62,28 +69,25 @@ class NotificationPipeline(
         val allRules = rules.all()
         val byRules = fresh.map { item -> item to RulesEngine.classify(input(n, item), allRules) }
         val decided = byRules.mapNotNull { (item, d) -> d?.let { item to it } }.toMutableList()
-        val gray = byRules.filter { it.second == null }.map { it.first }
-
-        var waitingForAi = false
+        var gray = byRules.filter { it.second == null }.map { it.first }
+        if (gray.isNotEmpty() && !ai.isAvailable) {
+            decided += gray.map { it to RulesEngine.fallback("No AI configured, letting it through") }
+            gray = emptyList()
+        }
+        val urgent = decided.filter { it.second.urgent }.map { it.first }
         if (gray.isNotEmpty()) {
-            if (ai.isAvailable) {
-                debouncer.submit(n.key, gray.map { Pending(n, it, actions) })
-                waitingForAi = true
-            } else {
-                decided += gray.map { it to RulesEngine.fallback("No AI configured, letting it through") }
-            }
+            debouncer.submit(n.key, gray.map { Pending(n, it, actions, updateHasUrgent = urgent.isNotEmpty()) })
         }
         if (decided.isEmpty()) return
 
         store(n, decided)
-        val urgent = decided.filter { it.second.urgent }.map { it.first }
         when {
             urgent.isNotEmpty() -> {
                 actions.repostUrgent(n, urgent)
                 lastHeld[n.key] = false
             }
             // Don't cancel yet: the AI may still decide the rest of this notification is urgent.
-            !waitingForAi -> {
+            gray.isEmpty() -> {
                 actions.cancel(n.key)
                 lastHeld[n.key] = true
             }
@@ -98,20 +102,33 @@ class NotificationPipeline(
             else RulesEngine.fallback("No AI configured, letting it through")
 
     private suspend fun decideGrayZone(key: String, batch: List<Pending>) {
+        // Calm was switched off while the AI was pending: leave the notification as it is.
+        if (!settings.enabled) return
         // The latest update of the conversation carries the freshest contentIntent and title.
         val latest = batch.last()
         val n = latest.n
         val decision = ai.classify(aiRequest(n.appLabel, n.conversationTitle, n.isGroupConversation, batch.map { it.item.sender to it.item.text }))
 
-        // The batch can span several updates of the notification; store each message with its own.
-        for ((source, items) in batch.groupBy { it.n }) store(source, items.map { it.item to decision })
+        try {
+            // The batch can span several updates of the notification; store each message with its own.
+            for ((source, items) in batch.groupBy { it.n }) store(source, items.map { it.item to decision })
+        } catch (e: Exception) {
+            // Runs outside the listener's error handling: a storage error must neither crash the
+            // app nor keep the decision from being acted on.
+            SafeLog.w({ "storing AI decision failed for ${n.packageName}" }, e)
+        }
 
-        if (decision.urgent) {
-            latest.actions.repostUrgent(n, batch.map { it.item })
-            lastHeld[key] = false
-        } else {
-            latest.actions.cancel(key)
-            lastHeld[key] = true
+        when {
+            decision.urgent -> {
+                latest.actions.repostUrgent(n, batch.map { it.item })
+                lastHeld[key] = false
+            }
+            // A rule let another message of this update through: cancelling would remove it too.
+            latest.updateHasUrgent -> lastHeld[key] = false
+            else -> {
+                latest.actions.cancel(key)
+                lastHeld[key] = true
+            }
         }
         events.changed()
     }

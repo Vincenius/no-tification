@@ -19,7 +19,7 @@ import com.vincentwill.calm.util.SafeLog
  * Keeps other apps from buzzing while Calm is on: only calls, repeat callers, alarms, media and
  * Calm's own channels may interrupt.
  *
- * - Android 15+: a dedicated "Calm" DND mode (AutomaticZenRule). The user's own DND setup is left
+ * - Android 15+: a dedicated "no-tification" DND mode (AutomaticZenRule). The user's own DND setup is left
  *   untouched, and turning Calm off just deactivates the mode.
  * - Android 14 and older: the global DND policy and filter, with the previous state saved and
  *   restored when Calm is turned off.
@@ -55,33 +55,34 @@ class DndController(private val context: Context, private val settings: Settings
     @RequiresApi(35)
     private fun activateMode() {
         val id = ensureRule()
-        nm.setAutomaticZenRuleState(id, Condition(CONDITION_URI, "Calm is on", Condition.STATE_TRUE, Condition.SOURCE_USER_ACTION))
+        nm.setAutomaticZenRuleState(id, Condition(CONDITION_URI, "no-tification is on", Condition.STATE_TRUE, Condition.SOURCE_USER_ACTION))
     }
 
     @RequiresApi(35)
     private fun deactivateMode() {
         val id = settings.zenRuleId ?: return
         if (nm.getAutomaticZenRule(id) == null) return
-        nm.setAutomaticZenRuleState(id, Condition(CONDITION_URI, "Calm is off", Condition.STATE_FALSE, Condition.SOURCE_USER_ACTION))
+        nm.setAutomaticZenRuleState(id, Condition(CONDITION_URI, "no-tification is off", Condition.STATE_FALSE, Condition.SOURCE_USER_ACTION))
     }
 
     @RequiresApi(35)
     private fun ensureRule(): String {
         settings.zenRuleId?.let { id ->
             nm.getAutomaticZenRule(id)?.let { existing ->
-                // Keep the rule, but make sure it has the current policy.
+                // Keep the rule, but make sure it has the current name and policy.
+                existing.name = MODE_NAME
                 existing.zenPolicy = zenPolicy()
                 nm.updateAutomaticZenRule(id, existing)
                 return id
             }
         }
-        val rule = AutomaticZenRule.Builder("Calm", CONDITION_URI)
+        val rule = AutomaticZenRule.Builder(MODE_NAME, CONDITION_URI)
             .setType(AutomaticZenRule.TYPE_OTHER)
             .setConfigurationActivity(ComponentName(context, MainActivity::class.java))
             .setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
             .setZenPolicy(zenPolicy())
             .setManualInvocationAllowed(true)
-            .setTriggerDescription("Turned on in the Calm app")
+            .setTriggerDescription("Turned on in the no-tification app")
             .setIconResId(R.drawable.ic_stat_calm)
             .build()
         return nm.addAutomaticZenRule(rule).also { settings.zenRuleId = it }
@@ -115,7 +116,7 @@ class DndController(private val context: Context, private val settings: Settings
             effects = Policy.SUPPRESSED_EFFECT_PEEK or Policy.SUPPRESSED_EFFECT_FULL_SCREEN_INTENT or
                 Policy.SUPPRESSED_EFFECT_LIGHTS
         }
-        nm.notificationPolicy = Policy(categories, Policy.PRIORITY_SENDERS_ANY, Policy.PRIORITY_SENDERS_ANY, effects)
+        nm.notificationPolicy = policy(categories, Policy.PRIORITY_SENDERS_ANY, Policy.PRIORITY_SENDERS_ANY, effects)
         nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
     }
 
@@ -126,10 +127,15 @@ class DndController(private val context: Context, private val settings: Settings
             return
         }
         val parts = saved.split('|').map { it.toInt() }
-        nm.notificationPolicy = Policy(parts[1], parts[2], parts[3], parts[4])
+        nm.notificationPolicy = policy(parts[1], parts[2], parts[3], parts[4])
         nm.setInterruptionFilter(parts[0])
         settings.savedDndState = null
     }
+
+    /** The constructor with suppressed visual effects only exists since Android 9 (API 28). */
+    private fun policy(categories: Int, callSenders: Int, messageSenders: Int, effects: Int) =
+        if (Build.VERSION.SDK_INT >= 28) Policy(categories, callSenders, messageSenders, effects)
+        else Policy(categories, callSenders, messageSenders)
 
     private fun encode(filter: Int, policy: Policy) = listOf(
         filter, policy.priorityCategories, policy.priorityCallSenders, policy.priorityMessageSenders,
@@ -137,6 +143,7 @@ class DndController(private val context: Context, private val settings: Settings
     ).joinToString("|")
 
     private companion object {
+        const val MODE_NAME = "no-tification"
         val CONDITION_URI: Uri = Uri.parse("condition://com.vincentwill.calm/active")
     }
 }

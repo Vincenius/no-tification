@@ -1,5 +1,6 @@
 package com.vincentwill.calm.ai
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -69,6 +70,24 @@ class ConversationDebouncerTest {
         advanceTimeBy(5_000)
         runCurrent()
         assertEquals(1, flushed.size)
+    }
+
+    @Test
+    fun `items stay pending while their flush is running`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        val d = ConversationDebouncer<String>(backgroundScope, quietMs = 3_000, maxWaitMs = 10_000) { _, _ -> release.await() }
+
+        d.submit("chat", listOf("hi"))
+        advanceTimeBy(3_001)
+        runCurrent()
+        // The flush (the AI call) hasn't returned yet: a repost must still see "hi" as known.
+        assertTrue(d.hasPending("chat"))
+        assertEquals(listOf("hi"), d.pending())
+
+        release.complete(Unit)
+        runCurrent()
+        assertFalse(d.hasPending("chat"))
+        assertTrue(d.pending().isEmpty())
     }
 
     @Test

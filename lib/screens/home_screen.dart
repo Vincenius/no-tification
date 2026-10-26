@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> with AutoRefresh {
     final result = await _bridge.setEnabled(on);
     if (on && !result && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Calm needs Do Not Disturb access to turn on.')),
+        const SnackBar(content: Text('no-tification needs Do Not Disturb access to turn on.')),
       );
     }
     await reload();
@@ -67,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> with AutoRefresh {
     final status = _status;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Calm'),
+        title: const Text('no-tification'),
         actions: [
           IconButton(
             onPressed: () async {
@@ -90,7 +90,7 @@ class _HomeScreenState extends State<HomeScreen> with AutoRefresh {
                   if (status.enabled && status.silencingSuspended)
                     _Banner(
                       icon: Icons.notifications_paused_outlined,
-                      text: 'Silencing is paused: Calm lost its connection to your notifications, so it turned '
+                      text: 'Silencing is paused: no-tification lost its connection to your notifications, so it turned '
                           'Do Not Disturb off to be safe. It resumes on its own once reconnected. Tap to reconnect now.',
                       error: true,
                       onTap: () async {
@@ -110,7 +110,7 @@ class _HomeScreenState extends State<HomeScreen> with AutoRefresh {
                       icon: Icons.checklist,
                       text: status.requiredGranted
                           ? 'Some recommended permissions are missing.'
-                          : 'Setup is incomplete. Calm can\'t hold notifications yet.',
+                          : 'Setup is incomplete. no-tification can\'t hold notifications yet.',
                       error: !status.requiredGranted,
                       onTap: _openSetup,
                     ),
@@ -146,13 +146,13 @@ class _MasterSwitch extends StatelessWidget {
       color: status.enabled ? scheme.primaryContainer : null,
       child: SwitchListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        title: Text(status.enabled ? 'Calm is on' : 'Calm is off', style: Theme.of(context).textTheme.titleLarge),
+        title: Text(status.enabled ? 'no-tification is on' : 'no-tification is off', style: Theme.of(context).textTheme.titleLarge),
         subtitle: Text(status.enabled
             ? 'Only urgent notifications come through. Everything else waits for the digest.\n'
                 '${status.aiActive ? 'AI judges messages no rule covers.' : 'Rules only: messages no rule covers come through.'}'
             : canEnable
                 ? 'Notifications behave as usual.'
-                : 'Finish setup to turn Calm on.'),
+                : 'Finish setup to turn no-tification on.'),
         value: status.enabled,
         onChanged: busy || (!canEnable && !status.enabled) ? null : onChanged,
       ),

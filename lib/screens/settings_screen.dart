@@ -38,7 +38,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove API key?'),
-        content: const Text('Calm will run on rules only. Anything no rule covers is let through.'),
+        content: const Text('no-tification will run on rules only. Anything no rule covers is let through.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
@@ -90,7 +90,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ? 'Messages no rule covers are judged by ${ai.model}.'
                             : ai.hasKey
                                 ? 'Off. Anything no rule covers is let through.'
-                                : 'Add an API key to use it. Until then Calm runs on rules only.'),
+                                : 'Add an API key to use it. Until then no-tification runs on rules only.'),
                         value: ai.enabled,
                         onChanged: (v) async => _set(await _bridge.setAiEnabled(v)),
                       ),
@@ -408,7 +408,7 @@ class _MaintenanceCardState extends State<_MaintenanceCard> with AutoRefresh {
             title: Text(healthText),
             subtitle: Text([
               if (m.silencingSuspended) 'Silencing is paused until it reconnects.',
-              if (m.lastHealthCheckAt != null) 'Checked ${formatDayTime(m.lastHealthCheckAt!)}. Checks run every 15 minutes while Calm is on.',
+              if (m.lastHealthCheckAt != null) 'Checked ${formatDayTime(m.lastHealthCheckAt!)}. Checks run every 15 minutes while no-tification is on.',
             ].join(' ')),
             trailing: TextButton(
               onPressed: _reconnecting ? null : _reconnect,
@@ -417,8 +417,8 @@ class _MaintenanceCardState extends State<_MaintenanceCard> with AutoRefresh {
           ),
           ListTile(
             leading: Icon(m.batteryOptimizationIgnored ? Icons.battery_charging_full : Icons.battery_alert_outlined),
-            title: Text(m.batteryOptimizationIgnored ? 'Battery optimization off for Calm' : 'Battery optimization is on'),
-            subtitle: m.batteryOptimizationIgnored ? null : const Text('Some phones then stop Calm in the background.'),
+            title: Text(m.batteryOptimizationIgnored ? 'Battery optimization off for no-tification' : 'Battery optimization is on'),
+            subtitle: m.batteryOptimizationIgnored ? null : const Text('Some phones then stop no-tification in the background.'),
             trailing: m.batteryOptimizationIgnored
                 ? null
                 : TextButton(

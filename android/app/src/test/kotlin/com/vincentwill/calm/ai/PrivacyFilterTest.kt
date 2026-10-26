@@ -32,6 +32,20 @@ class PrivacyFilterTest {
     }
 
     @Test
+    fun `a date followed by a time is not mistaken for a phone number`() {
+        listOf("Meeting 26.10.2026 14:30", "Ab 1.11.26 9:00 geschlossen", "Due 26/10/2026 18:00").forEach {
+            assertEquals(it, PrivacyFilter.clean(it))
+        }
+        assertEquals("On 26.10.2026 call [phone]", PrivacyFilter.clean("On 26.10.2026 call 0151 2345678"))
+    }
+
+    @Test
+    fun `phone numbers that contain a date-like part are still masked`() {
+        assertEquals("Call [phone] now", PrivacyFilter.clean("Call 0151 12.10.4567 now"))
+        assertEquals("Call [phone] now", PrivacyFilter.clean("Call 0151.12.10.45 now"))
+    }
+
+    @Test
     fun `a sender that is only a number becomes unknown contact`() {
         assertEquals("unknown contact", PrivacyFilter.cleanName("+49 151 23456789"))
         assertEquals("Anna", PrivacyFilter.cleanName(" Anna "))

@@ -85,7 +85,7 @@ class _RulesScreenState extends State<RulesScreen> with AutoRefresh {
         builder: (context) => SimpleDialog(
           title: const Text('Always hold notifications from'),
           children: apps.isEmpty
-              ? [const Padding(padding: EdgeInsets.all(24), child: Text('Apps appear here after Calm has seen a notification from them.'))]
+              ? [const Padding(padding: EdgeInsets.all(24), child: Text('Apps appear here after no-tification has seen a notification from them.'))]
               : [
                   for (final a in apps)
                     SimpleDialogOption(

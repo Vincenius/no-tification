@@ -35,7 +35,7 @@ class _LogScreenState extends State<LogScreen> with AutoRefresh {
             child: Padding(
               padding: EdgeInsets.all(32),
               child: Text(
-                'Nothing processed yet.\nTurn Calm on and notifications will appear here with their decision.',
+                'Nothing processed yet.\nTurn no-tification on and notifications will appear here with their decision.',
                 textAlign: TextAlign.center,
               ),
             ),

@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -47,7 +48,9 @@ class HealthMonitor(
         val access = hasAccess()
         if (connected && access) {
             settings.listenerDisconnectedSince = null
-        } else if (settings.listenerDisconnectedSince == null) {
+        } else if (settings.listenerDisconnectedSince.let { it == null || it < bootTime(now) }) {
+            // A disconnect from before a reboot (the listener goes away at shutdown) doesn't count:
+            // Android binds the listener again shortly after boot, so the grace period starts now.
             settings.listenerDisconnectedSince = now
         }
         settings.lastHealthCheckAt = now
@@ -127,13 +130,13 @@ class HealthMonitor(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val text = if (accessRevoked) {
-            "Notification access was turned off, so Calm paused Do Not Disturb. Tap to fix."
+            "Notification access was turned off, so no-tification paused Do Not Disturb. Tap to fix."
         } else {
-            "Calm isn't receiving notifications right now, so it paused Do Not Disturb. Nothing will be held until it reconnects."
+            "no-tification isn't receiving notifications right now, so it paused Do Not Disturb. Nothing will be held until it reconnects."
         }
         val notification = NotificationCompat.Builder(context, channels.statusId)
             .setSmallIcon(R.drawable.ic_stat_calm)
-            .setContentTitle("Calm paused silencing")
+            .setContentTitle("no-tification paused silencing")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(open)
@@ -142,6 +145,8 @@ class HealthMonitor(
         @Suppress("MissingPermission") // checked above
         NotificationManagerCompat.from(context).notify(WARNING_ID, notification)
     }
+
+    private fun bootTime(now: Long) = now - SystemClock.elapsedRealtime()
 
     private fun schedule(delayMs: Long) {
         // Inexact is fine for a watchdog and needs no permission.

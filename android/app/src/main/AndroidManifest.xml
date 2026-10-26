@@ -13,7 +13,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
-        android:label="Calm"
+        android:label="no-tification"
         android:name=".CalmApplication"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -43,7 +43,7 @@
              and survives the app being swiped away. -->
         <service
             android:name=".listener.CalmListenerService"
-            android:label="Calm"
+            android:label="no-tification"
             android:exported="true"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>

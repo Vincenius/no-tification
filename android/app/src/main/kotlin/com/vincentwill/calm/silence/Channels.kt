@@ -32,17 +32,16 @@ class Channels(private val context: Context, private val settings: Settings) {
             }
             settings.channelsCreatedWithDndAccess = true
         }
-        if (nm.getNotificationChannel(statusId) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(statusId, "Calm status", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Warnings when Calm can't do its job, e.g. the listener disconnected"
-                },
-            )
-        }
+        // Recreating an existing channel only updates its name and description (e.g. after a rename).
+        nm.createNotificationChannel(
+            NotificationChannel(statusId, "no-tification status", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Warnings when no-tification can't do its job, e.g. the listener disconnected"
+            },
+        )
         if (nm.getNotificationChannel(urgentId) != null) return
 
         val urgent = NotificationChannel(urgentId, "Urgent", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "Notifications Calm let through immediately"
+            description = "Notifications no-tification let through immediately"
             setBypassDnd(true)
             enableVibration(true)
         }

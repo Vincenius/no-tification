@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../models/ai_settings.dart';
 import '../models/entry.dart';
 import '../models/native_status.dart';
 import '../models/rule.dart';
@@ -100,4 +101,36 @@ class NativeBridge {
   Future<void> deleteRule(int id) => _call('deleteRule', {'id': id});
 
   Future<List<AppSeen>> getAppsSeen() async => (await _list('getAppsSeen')).map(AppSeen.fromMap).toList();
+
+  // AI
+
+  Future<AiSettings> _aiCall(String method, [Map<String, Object?>? args]) async =>
+      AiSettings.fromMap(await _methods.invokeMapMethod<Object?, Object?>(method, args) ?? const {});
+
+  Future<AiSettings> getAiSettings() => _aiCall('getAiSettings');
+
+  /// Null or empty removes the key.
+  Future<AiSettings> setApiKey(String? key) => _aiCall('setApiKey', {'key': key});
+
+  Future<AiSettings> setAiEnabled(bool enabled) => _aiCall('setAiEnabled', {'enabled': enabled});
+
+  /// Empty resets to the default model.
+  Future<AiSettings> setAiModel(String model) => _aiCall('setAiModel', {'model': model});
+
+  /// Runs rules and AI on a made-up message, without storing anything.
+  Future<TestResult> testClassification({
+    required String text,
+    String? appLabel,
+    String? sender,
+    String? conversation,
+    bool isGroup = false,
+  }) async =>
+      TestResult.fromMap(await _methods.invokeMapMethod<Object?, Object?>('testClassification', {
+            'text': text,
+            'appLabel': appLabel,
+            'sender': sender,
+            'conversation': conversation,
+            'isGroup': isGroup,
+          }) ??
+          const {});
 }

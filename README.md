@@ -7,15 +7,16 @@ other apps' notifications.
 Flutter renders the UI. The whole pipeline (interception → classification → storage) runs natively
 in a Kotlin `NotificationListenerService`, so it works without the Flutter engine running.
 
-**Status:** milestone 2: storage, rules, Do Not Disturb silencing and scheduled digests. No AI yet,
-so anything no rule covers is let through (fail open).
+**Status:** milestone 3: storage, rules, Do Not Disturb silencing, scheduled digests and optional AI
+classification for messages no rule covers.
 
 ## How it works
 
 1. The listener extracts every notification and keeps only *new* messages: messaging apps repost
    the whole conversation on each message, so messages are deduplicated by key, sender, time and text.
 2. Each new message is classified: always-urgent (calls, alarms, calendar, 2FA codes, VIPs) →
-   your custom rules → always-hold (hold list, muted groups, promo/social) → fallback: urgent.
+   your custom rules → always-hold (hold list, muted groups, promo/social) → AI → fallback: urgent.
+   Messages that reach the AI wait about 3 s per conversation, so a burst becomes one AI call.
 3. Held messages are stored and the original notification is cancelled. Urgent ones are re-posted
    on Calm's "Urgent" channel, which rings through DND. The copy removes itself after a minute and
    the original (with reply buttons) stays in the shade.
@@ -54,10 +55,24 @@ App info → ⋮ → *Allow restricted settings*, then grant access.
 | Exact alarms (optional) | Deliver digests on time, otherwise up to 10 min late | 2 |
 | Battery optimization exemption | Keep the service alive on aggressive OEMs | 4 |
 
-## API key
+## API key (optional)
 
-AI classification arrives in milestone 3. The key will be entered in Settings and stored encrypted
-on the device. Without a key, the app runs on rules only.
+1. Create a key at [console.anthropic.com](https://console.anthropic.com) → API Keys.
+2. In Calm, open Home → ⚙ Settings → *Anthropic API key*, paste it and save.
+3. Use *Test classification* in the same screen to check that it works ("AI" in the result line).
+
+The key is encrypted with an Android Keystore key (AES-GCM) and only ever sent to Anthropic. The
+model defaults to `claude-haiku-5-5` and can be changed in Settings. Without a key, or with AI
+switched off, Calm runs on rules only and lets anything unknown through.
+
+**What is sent:** app name, conversation name, sender name, whether it's a group, the message
+text and the current local time. Phone numbers and email addresses are replaced first, and a sender
+that is only a phone number becomes "unknown contact". Package names and contact details are never
+sent.
+
+**Fail open:** if the API takes longer than 5 s, returns an error, refuses, answers with invalid
+JSON or reports a confidence below 0.6, the message is let through. The log shows these as
+"Fallback" with the reason.
 
 ## Tests
 

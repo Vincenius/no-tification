@@ -27,6 +27,15 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("next_digest_exact", true)
         set(value) = prefs.edit { putBoolean("next_digest_exact", value) }
 
+    /** AI classification for the gray zone; only active when an API key is stored too. */
+    var aiEnabled: Boolean
+        get() = prefs.getBoolean("ai_enabled", true)
+        set(value) = prefs.edit { putBoolean("ai_enabled", value) }
+
+    var aiModel: String
+        get() = prefs.getString("ai_model", null)?.takeIf { it.isNotBlank() } ?: DEFAULT_AI_MODEL
+        set(value) = prefs.edit { putString("ai_model", value.trim().ifEmpty { DEFAULT_AI_MODEL }) }
+
     var defaultsSeeded: Boolean
         get() = prefs.getBoolean("defaults_seeded", false)
         set(value) = prefs.edit { putBoolean("defaults_seeded", value) }
@@ -53,3 +62,5 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("channels_with_dnd", false)
         set(value) = prefs.edit { putBoolean("channels_with_dnd", value) }
 }
+
+const val DEFAULT_AI_MODEL = "claude-haiku-5-5"

@@ -3,9 +3,13 @@ package com.vincentwill.calm
 import android.app.Application
 import android.content.Context
 import android.telecom.TelecomManager
+import com.vincentwill.calm.ai.AiBackend
+import com.vincentwill.calm.ai.AiClassifier
+import com.vincentwill.calm.ai.AnthropicBackend
 import com.vincentwill.calm.data.CalmDatabase
 import com.vincentwill.calm.data.RulesRepository
 import com.vincentwill.calm.data.ScheduleRepository
+import com.vincentwill.calm.data.SecretStore
 import com.vincentwill.calm.data.Settings
 import com.vincentwill.calm.digest.DigestDelivery
 import com.vincentwill.calm.digest.DigestScheduler
@@ -37,7 +41,22 @@ class CalmGraph private constructor(context: Context) {
         events.changed()
     }
     val delivery = DigestDelivery(app, db.notifications(), channels)
-    val pipeline = NotificationPipeline(db.notifications(), rules, settings, events, ::isDialer)
+    val secrets = SecretStore(app)
+    val ai = AiClassifier(::aiBackend)
+    val pipeline = NotificationPipeline(db.notifications(), rules, settings, events, ai, scope, ::isDialer)
+
+    /** (api key, model) → client, rebuilt when either changes. */
+    private var backend: Pair<Pair<String, String>, AnthropicBackend>? = null
+
+    /** Null when AI is off or no key is stored: the pipeline then runs on rules only. */
+    @Synchronized
+    fun aiBackend(): AiBackend? {
+        val key = secrets.apiKey
+        if (!settings.aiEnabled || key == null) return null
+        val config = key to settings.aiModel
+        backend?.let { (cfg, client) -> if (cfg == config) return client else client.close() }
+        return AnthropicBackend(key, config.second).also { backend = config to it }
+    }
 
     private val telecom = app.getSystemService(TelecomManager::class.java)
 

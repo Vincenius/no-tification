@@ -60,7 +60,11 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.5")
     implementation("androidx.room:room-ktx:2.8.5")
     ksp("androidx.room:room-compiler:2.8.5")
+    implementation("com.anthropic:anthropic-java:2.71.0")
+    // The SDK pulls kotlin-reflect 1.9 for Jackson; keep it in line with our Kotlin version.
+    implementation("org.jetbrains.kotlin:kotlin-reflect:2.3.20")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

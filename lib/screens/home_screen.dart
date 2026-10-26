@@ -6,6 +6,7 @@ import '../util/format.dart';
 import '../widgets/auto_refresh.dart';
 import 'onboarding_screen.dart';
 import 'schedule_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.onOpenDigest});
@@ -58,7 +59,19 @@ class _HomeScreenState extends State<HomeScreen> with AutoRefresh {
   Widget build(BuildContext context) {
     final status = _status;
     return Scaffold(
-      appBar: AppBar(title: const Text('Calm')),
+      appBar: AppBar(
+        title: const Text('Calm'),
+        actions: [
+          IconButton(
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SettingsScreen()));
+              reload();
+            },
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+          ),
+        ],
+      ),
       body: status == null
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -113,7 +126,8 @@ class _MasterSwitch extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         title: Text(status.enabled ? 'Calm is on' : 'Calm is off', style: Theme.of(context).textTheme.titleLarge),
         subtitle: Text(status.enabled
-            ? 'Only urgent notifications come through. Everything else waits for the digest.'
+            ? 'Only urgent notifications come through. Everything else waits for the digest.\n'
+                '${status.aiActive ? 'AI judges messages no rule covers.' : 'Rules only: messages no rule covers come through.'}'
             : canEnable
                 ? 'Notifications behave as usual.'
                 : 'Finish setup to turn Calm on.'),

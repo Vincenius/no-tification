@@ -2,6 +2,8 @@
 
     <!-- Needed to resolve app labels and launch intents of the apps whose notifications we read. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Only for the optional AI classification (Anthropic API). -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Calm's own Do Not Disturb mode keeps held notifications from buzzing. -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

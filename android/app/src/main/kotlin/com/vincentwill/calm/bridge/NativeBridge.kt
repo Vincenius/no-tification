@@ -11,11 +11,13 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import com.vincentwill.calm.CalmGraph
+import com.vincentwill.calm.classify.ClassificationInput
 import com.vincentwill.calm.classify.MatchType
 import com.vincentwill.calm.classify.Rule
 import com.vincentwill.calm.classify.RuleAction
 import com.vincentwill.calm.classify.RuleKind
 import com.vincentwill.calm.classify.RulesEngine
+import com.vincentwill.calm.data.DEFAULT_AI_MODEL
 import com.vincentwill.calm.data.NotificationEntity
 import com.vincentwill.calm.digest.NextDigestCalculator
 import com.vincentwill.calm.digest.ScheduleGroup
@@ -136,6 +138,45 @@ class NativeBridge(private val activity: Activity, messenger: BinaryMessenger) :
                     mapOf("packageName" to it.packageName, "appLabel" to it.appLabel, "count" to it.count)
                 }
             }
+
+            // AI
+            "getAiSettings" -> respond(result) { aiSettings() }
+            "setApiKey" -> respond(result) {
+                graph.secrets.apiKey = call.argument<String>("key")
+                graph.events.changed()
+                aiSettings()
+            }
+            "setAiEnabled" -> respond(result) {
+                graph.settings.aiEnabled = call.arg("enabled")
+                graph.events.changed()
+                aiSettings()
+            }
+            "setAiModel" -> respond(result) {
+                graph.settings.aiModel = call.argument<String>("model").orEmpty()
+                aiSettings()
+            }
+            "testClassification" -> respond(result) {
+                val started = System.nanoTime()
+                val decision = graph.pipeline.preview(
+                    ClassificationInput(
+                        packageName = call.argument<String>("packageName") ?: "test.app",
+                        appLabel = call.argument<String>("appLabel")?.ifBlank { null } ?: "Test",
+                        title = call.argument<String>("sender"),
+                        text = call.arg("text"),
+                        conversationTitle = call.argument<String>("conversation")?.ifBlank { null },
+                        sender = call.argument<String>("sender")?.ifBlank { null },
+                        isGroup = call.argument<Boolean>("isGroup") ?: false,
+                        category = null,
+                    ),
+                )
+                mapOf(
+                    "urgent" to decision.urgent,
+                    "reason" to decision.reason,
+                    "decisionSource" to decision.source.name,
+                    "decisionStep" to decision.step.name,
+                    "millis" to (System.nanoTime() - started) / 1_000_000,
+                )
+            }
             else -> result.notImplemented()
         }
     }
@@ -215,6 +256,7 @@ class NativeBridge(private val activity: Activity, messenger: BinaryMessenger) :
             "todayPassed" to dao.countSince(startOfDay, urgent = true),
             "todayHeld" to dao.countSince(startOfDay, urgent = false),
             "sdkInt" to Build.VERSION.SDK_INT,
+            "aiActive" to graph.ai.isAvailable,
         )
     }
 
@@ -232,6 +274,19 @@ class NativeBridge(private val activity: Activity, messenger: BinaryMessenger) :
             },
             "upcoming" to NextDigestCalculator.upcoming(schedule, ZonedDateTime.now(), 3).map { it.toInstant().toEpochMilli() },
             "exactAlarms" to graph.scheduler.canScheduleExact(),
+        )
+    }
+
+    /** Never sends the key itself back to Flutter, only whether one is stored and its last characters. */
+    private fun aiSettings(): Map<String, Any?> {
+        val key = graph.secrets.apiKey
+        return mapOf(
+            "hasKey" to (key != null),
+            "keyHint" to key?.takeLast(4),
+            "enabled" to graph.settings.aiEnabled,
+            "model" to graph.settings.aiModel,
+            "defaultModel" to DEFAULT_AI_MODEL,
+            "active" to graph.ai.isAvailable,
         )
     }
 

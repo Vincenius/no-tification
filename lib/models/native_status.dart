@@ -12,6 +12,7 @@ class NativeStatus {
     required this.todayPassed,
     required this.todayHeld,
     required this.sdkInt,
+    required this.aiActive,
   });
 
   final bool notificationAccess;
@@ -26,6 +27,7 @@ class NativeStatus {
   final int todayPassed;
   final int todayHeld;
   final int sdkInt;
+  final bool aiActive;
 
   /// Without these Calm can't work at all.
   bool get requiredGranted => notificationAccess && dndAccess && postNotifications;
@@ -48,6 +50,7 @@ class NativeStatus {
       todayPassed: map['todayPassed'] as int? ?? 0,
       todayHeld: map['todayHeld'] as int? ?? 0,
       sdkInt: map['sdkInt'] as int? ?? 0,
+      aiActive: map['aiActive'] as bool? ?? false,
     );
   }
 }

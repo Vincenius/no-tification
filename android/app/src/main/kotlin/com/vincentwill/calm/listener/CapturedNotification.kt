@@ -5,6 +5,8 @@ data class CapturedMessage(
     val sender: String?,
     val text: String,
     val timestamp: Long,
+    /** Sent by the user themselves (MessagingStyle messages without a sender person). */
+    val fromSelf: Boolean = false,
 )
 
 /** Everything we extract from a posted notification. Free of Android types so it is unit-testable. */
@@ -21,21 +23,4 @@ data class CapturedNotification(
     val postTime: Long,
     val messages: List<CapturedMessage>,
     val hasContentIntent: Boolean,
-) {
-    fun toMap(): Map<String, Any?> = mapOf(
-        "id" to id,
-        "key" to key,
-        "packageName" to packageName,
-        "appLabel" to appLabel,
-        "title" to title,
-        "text" to text,
-        "conversationTitle" to conversationTitle,
-        "isGroupConversation" to isGroupConversation,
-        "category" to category,
-        "postTime" to postTime,
-        "messages" to messages.map {
-            mapOf("sender" to it.sender, "text" to it.text, "timestamp" to it.timestamp)
-        },
-        "hasContentIntent" to hasContentIntent,
-    )
-}
+)

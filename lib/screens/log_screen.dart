@@ -1,12 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../bridge/native_bridge.dart';
-import '../models/captured_notification.dart';
-import '../models/native_status.dart';
+import '../models/entry.dart';
+import '../util/format.dart';
+import '../widgets/auto_refresh.dart';
 
-/// Live list of every intercepted notification.
+/// Every processed notification with its decision and reason, live.
 class LogScreen extends StatefulWidget {
   const LogScreen({super.key});
 
@@ -14,136 +13,60 @@ class LogScreen extends StatefulWidget {
   State<LogScreen> createState() => _LogScreenState();
 }
 
-class _LogScreenState extends State<LogScreen> {
+class _LogScreenState extends State<LogScreen> with AutoRefresh {
   final _bridge = NativeBridge.instance;
-  final List<CapturedNotification> _items = [];
-  NativeStatus _status = NativeStatus.unknown;
-  final List<StreamSubscription<Object?>> _subs = [];
+  List<Entry>? _entries;
 
   @override
-  void initState() {
-    super.initState();
-    _subs.add(_bridge.notifications.listen((n) => setState(() => _items.insert(0, n))));
-    _subs.add(_bridge.statusChanges.listen((s) => setState(() => _status = s)));
-    _load();
-  }
-
-  @override
-  void dispose() {
-    for (final s in _subs) {
-      s.cancel();
-    }
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    final (log, status) = await (_bridge.getLog(), _bridge.getStatus()).wait;
-    if (!mounted) return;
-    setState(() {
-      _items
-        ..clear()
-        ..addAll(log);
-      _status = status;
-    });
-  }
-
-  Future<void> _clear() async {
-    await _bridge.clearLog();
-    await _load();
+  Future<void> reload() async {
+    final entries = await _bridge.getHistory();
+    if (mounted) setState(() => _entries = entries);
   }
 
   @override
   Widget build(BuildContext context) {
+    final entries = _entries;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Live log'),
-        actions: [
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh), tooltip: 'Reload'),
-          IconButton(
-            onPressed: _items.isEmpty ? null : _clear,
-            icon: const Icon(Icons.delete_sweep_outlined),
-            tooltip: 'Clear',
+      appBar: AppBar(title: const Text('Log')),
+      body: switch (entries) {
+        null => const Center(child: CircularProgressIndicator()),
+        [] => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Text(
+                'Nothing processed yet.\nTurn Calm on and notifications will appear here with their decision.',
+                textAlign: TextAlign.center,
+              ),
+            ),
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          _StatusBanner(status: _status, count: _items.length),
-          Expanded(
-            child: _items.isEmpty
-                ? const _EmptyState()
-                : RefreshIndicator(
-                    onRefresh: _load,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      itemCount: _items.length,
-                      itemBuilder: (context, i) => _LogTile(
-                        item: _items[i],
-                        onTap: () => _bridge.openNotification(_items[i]),
-                      ),
-                    ),
-                  ),
+        _ => RefreshIndicator(
+            onRefresh: reload,
+            child: ListView.separated(
+              padding: const EdgeInsets.only(bottom: 24),
+              itemCount: entries.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, i) => _LogTile(entry: entries[i], onTap: () => _bridge.openEntry(entries[i])),
+            ),
           ),
-        ],
-      ),
+      },
     );
   }
-}
-
-class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.status, required this.count});
-
-  final NativeStatus status;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final ok = status.listenerConnected;
-    return Container(
-      width: double.infinity,
-      color: ok ? scheme.secondaryContainer : scheme.errorContainer,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Text(
-        ok
-            ? 'Listener connected · $count captured · ${status.ignoredCount} ignored'
-            : 'Listener not connected. Toggle notification access off and on if this persists.',
-        style: TextStyle(color: ok ? scheme.onSecondaryContainer : scheme.onErrorContainer),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
-
-  @override
-  Widget build(BuildContext context) => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text(
-            'Nothing captured yet.\nSend yourself a message to see it appear here.',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      );
 }
 
 class _LogTile extends StatelessWidget {
-  const _LogTile({required this.item, required this.onTap});
+  const _LogTile({required this.entry, required this.onTap});
 
-  final CapturedNotification item;
+  final Entry entry;
   final VoidCallback onTap;
+
+  static const _sourceLabels = {'RULE': 'Rule', 'AI': 'AI', 'FALLBACK': 'Fallback'};
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant);
-    final tags = [
-      if (item.category != null) item.category!,
-      if (item.isGroupConversation) 'group',
-      if (item.messages.isNotEmpty) '${item.messages.length} msg',
-    ];
+    final scheme = theme.colorScheme;
+    final muted = theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final e = entry;
 
     return InkWell(
       onTap: onTap,
@@ -154,34 +77,38 @@ class _LogTile extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text(item.appLabel, style: theme.textTheme.labelLarge)),
-                Text(_time(item.postTime), style: muted),
+                _Badge(
+                  label: e.urgent ? 'Urgent' : 'Held',
+                  background: e.urgent ? scheme.tertiaryContainer : scheme.surfaceContainerHighest,
+                  foreground: e.urgent ? scheme.onTertiaryContainer : scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text('${e.appLabel} · ${e.conversation}', style: theme.textTheme.labelLarge, overflow: TextOverflow.ellipsis)),
+                Text(formatDayTime(e.receivedAt), style: muted),
               ],
             ),
-            if (item.conversationTitle != null)
-              Text(item.conversationTitle!, style: theme.textTheme.titleSmall),
-            if (item.title != null && item.title != item.conversationTitle)
-              Text(item.title!, style: theme.textTheme.titleSmall),
-            if (item.messages.isNotEmpty)
-              for (final m in item.messages.reversed.take(3).toList().reversed)
-                Text(
-                  m.sender == null ? m.text : '${m.sender}: ${m.text}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                )
-            else if (item.text != null)
-              Text(item.text!, maxLines: 3, overflow: TextOverflow.ellipsis),
-            if (tags.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(tags.join(' · '), style: muted),
-            ],
+            const SizedBox(height: 4),
+            Text(e.displayText, maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            Text('${_sourceLabels[e.decisionSource] ?? e.decisionSource}: ${e.reason}', style: muted),
           ],
         ),
       ),
     );
   }
+}
 
-  static String _time(DateTime t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:'
-      '${t.second.toString().padLeft(2, '0')}';
+class _Badge extends StatelessWidget {
+  const _Badge({required this.label, required this.background, required this.foreground});
+
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(8)),
+        child: Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: foreground)),
+      );
 }

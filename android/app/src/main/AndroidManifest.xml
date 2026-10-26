@@ -2,10 +2,15 @@
 
     <!-- Needed to resolve app labels and launch intents of the apps whose notifications we read. -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Calm's own Do Not Disturb mode keeps held notifications from buzzing. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:label="Calm"
-        android:name="${applicationName}"
+        android:name=".CalmApplication"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
@@ -41,6 +46,23 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name=".digest.DigestAlarmReceiver"
+            android:exported="false" />
+
+        <!-- System broadcasts reach non-exported receivers. -->
+        <receiver
+            android:name=".digest.SystemEventsReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

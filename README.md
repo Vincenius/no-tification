@@ -7,7 +7,26 @@ other apps' notifications.
 Flutter renders the UI. The whole pipeline (interception → classification → storage) runs natively
 in a Kotlin `NotificationListenerService`, so it works without the Flutter engine running.
 
-**Status:** milestone 1, interception plus a live log. Nothing is silenced yet.
+**Status:** milestone 2: storage, rules, Do Not Disturb silencing and scheduled digests. No AI yet,
+so anything no rule covers is let through (fail open).
+
+## How it works
+
+1. The listener extracts every notification and keeps only *new* messages: messaging apps repost
+   the whole conversation on each message, so messages are deduplicated by key, sender, time and text.
+2. Each new message is classified: always-urgent (calls, alarms, calendar, 2FA codes, VIPs) →
+   your custom rules → always-hold (hold list, muted groups, promo/social) → fallback: urgent.
+3. Held messages are stored and the original notification is cancelled. Urgent ones are re-posted
+   on Calm's "Urgent" channel, which rings through DND. The copy removes itself after a minute and
+   the original (with reply buttons) stays in the shade.
+4. At each digest time Calm posts one summary ("12 held notifications from 5 apps") that opens the
+   digest screen.
+
+While Calm is on, it keeps its own Do Not Disturb mode active so nothing else can buzz before Calm
+has decided. Calls, repeat callers, alarms and media still come through. On Android 15+ this is a
+separate "Calm" mode that leaves your own DND setup alone. On older versions Calm saves your DND
+settings and restores them when you turn Calm off. When Calm is off, it does nothing and records
+nothing.
 
 ## Setup
 
@@ -29,9 +48,10 @@ App info → ⋮ → *Allow restricted settings*, then grant access.
 |---|---|---|
 | Notification access | Read incoming notifications | 1 |
 | Query all packages | Show app names and open the source app | 1 |
-| Do Not Disturb access | Keep non-urgent notifications from buzzing | 2 |
-| Exact alarms | Deliver digests on time | 2 |
 | Post notifications | Re-post urgent notifications and digest summaries | 2 |
+| Do Not Disturb access | Keep non-urgent notifications from buzzing | 2 |
+| "Override Do Not Disturb" on the Urgent channel | Let Calm's own alerts ring | 2 |
+| Exact alarms (optional) | Deliver digests on time, otherwise up to 10 min late | 2 |
 | Battery optimization exemption | Keep the service alive on aggressive OEMs | 4 |
 
 ## API key

@@ -24,6 +24,7 @@ class NotificationExtractor(private val context: Context) {
                 sender = message.person?.name?.toString(),
                 text = text,
                 timestamp = message.timestamp,
+                fromSelf = message.person == null,
             )
         }
 

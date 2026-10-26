@@ -11,57 +11,134 @@ class PermissionStep {
     required this.granted,
     required this.onGrant,
     this.required = true,
+    this.available = true,
+    this.unavailableHint,
   });
 
   final String title;
   final String explanation;
   final bool granted;
   final bool required;
+
+  /// False while an earlier step it depends on is missing.
+  final bool available;
+  final String? unavailableHint;
   final Future<void> Function() onGrant;
 }
 
-class OnboardingScreen extends StatelessWidget {
-  const OnboardingScreen({super.key, required this.status, required this.onRefresh});
+List<PermissionStep> permissionSteps(NativeStatus status, {required VoidCallback onPostNotificationsTapped}) {
+  final bridge = NativeBridge.instance;
+  return [
+    PermissionStep(
+      title: 'Notification access',
+      explanation: 'Calm reads incoming notifications to decide which ones are urgent. Everything '
+          'stays on this phone. Android shows a strong warning here. That is expected for this kind of app.',
+      granted: status.notificationAccess,
+      onGrant: bridge.openNotificationAccessSettings,
+    ),
+    PermissionStep(
+      title: 'Post notifications',
+      explanation: 'Calm shows urgent notifications itself, plus one summary at each digest time.',
+      granted: status.postNotifications,
+      onGrant: () async => onPostNotificationsTapped(),
+    ),
+    PermissionStep(
+      title: 'Do Not Disturb access',
+      explanation: 'Android plays the sound before Calm can react. So while Calm is on, it runs its own '
+          'Do Not Disturb mode: calls, alarms and Calm itself still come through, everything else is '
+          'quiet until Calm decides. Turning Calm off restores your previous setup.',
+      granted: status.dndAccess,
+      onGrant: bridge.openDndAccessSettings,
+    ),
+    PermissionStep(
+      title: 'Let Calm through Do Not Disturb',
+      explanation: 'Urgent notifications are shown on Calm\'s "Urgent" channel, which must be allowed to '
+          'override Do Not Disturb. If the switch below shows as not granted, turn on "Override Do Not '
+          'Disturb" for the Urgent channel.',
+      granted: status.urgentBypassesDnd,
+      required: false,
+      available: status.dndAccess,
+      unavailableHint: 'Grant Do Not Disturb access first.',
+      onGrant: bridge.openUrgentChannelSettings,
+    ),
+    PermissionStep(
+      title: 'Exact alarms',
+      explanation: 'Delivers digests exactly on time. Without it, Android may deliver them up to 10 minutes late.',
+      granted: status.exactAlarms,
+      required: false,
+      onGrant: bridge.openExactAlarmSettings,
+    ),
+  ];
+}
+
+class OnboardingScreen extends StatefulWidget {
+  const OnboardingScreen({super.key, required this.status, required this.onRefresh, this.onSkip, this.onDone});
 
   final NativeStatus status;
   final Future<void> Function() onRefresh;
 
-  List<PermissionStep> get _steps => [
-        PermissionStep(
-          title: 'Notification access',
-          explanation: 'Calm reads incoming notifications so it can decide which ones are urgent. '
-              'Everything stays on this phone. Android will show a strong warning, which is '
-              'expected for this kind of app.',
-          granted: status.notificationAccess,
-          onGrant: NativeBridge.instance.openNotificationAccessSettings,
-        ),
-      ];
+  /// Shown as "Skip for now" when non-null.
+  final VoidCallback? onSkip;
+
+  /// Shown as a close button when opened from the home screen.
+  final VoidCallback? onDone;
+
+  @override
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> {
+  bool _askedPostNotifications = false;
+
+  /// Android only shows the runtime dialog a limited number of times; after that, go to settings.
+  void _onPostNotifications() {
+    if (_askedPostNotifications || widget.status.sdkInt < 33) {
+      NativeBridge.instance.openAppNotificationSettings();
+    } else {
+      NativeBridge.instance.requestPostNotifications();
+      _askedPostNotifications = true;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final steps = _steps;
+    final steps = permissionSteps(widget.status, onPostNotificationsTapped: _onPostNotifications);
     final theme = Theme.of(context);
     return Scaffold(
+      appBar: widget.onDone == null
+          ? null
+          : AppBar(title: const Text('Setup'), leading: CloseButton(onPressed: widget.onDone)),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-          children: [
-            Text('Welcome to Calm', style: theme.textTheme.headlineMedium),
-            const SizedBox(height: 8),
-            Text(
-              'Urgent notifications come through right away. Everything else waits for your '
-              'next digest. Calm needs a few permissions to do that.',
-              style: theme.textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 24),
-            for (final (i, step) in steps.indexed) _StepCard(index: i + 1, step: step),
-            const SizedBox(height: 16),
-            TextButton.icon(
-              onPressed: onRefresh,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Check again'),
-            ),
-          ],
+        child: RefreshIndicator(
+          onRefresh: widget.onRefresh,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 32, 16, 24),
+            children: [
+              if (widget.onDone == null) ...[
+                Text('Welcome to Calm', style: theme.textTheme.headlineMedium),
+                const SizedBox(height: 8),
+                Text(
+                  'Urgent notifications come through right away. Everything else waits for your next digest. '
+                  'Calm needs a few permissions to do that.',
+                  style: theme.textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 24),
+              ],
+              for (final (i, step) in steps.indexed) _StepCard(index: i + 1, step: step),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: widget.onRefresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Check again'),
+                  ),
+                  const Spacer(),
+                  if (widget.onSkip != null) TextButton(onPressed: widget.onSkip, child: const Text('Skip for now')),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -95,10 +172,9 @@ class _StepCard extends StatelessWidget {
                       : Text('$index', style: const TextStyle(fontSize: 13)),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Text(step.title, style: Theme.of(context).textTheme.titleMedium),
-                ),
-                if (!step.required) const Chip(label: Text('Optional')),
+                Expanded(child: Text(step.title, style: Theme.of(context).textTheme.titleMedium)),
+                if (!step.required)
+                  Text('Recommended', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: scheme.outline)),
               ],
             ),
             const SizedBox(height: 8),
@@ -106,9 +182,11 @@ class _StepCard extends StatelessWidget {
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
-              child: step.granted
-                  ? Text('Granted', style: TextStyle(color: scheme.primary))
-                  : FilledButton(onPressed: step.onGrant, child: const Text('Grant')),
+              child: switch ((step.granted, step.available)) {
+                (true, _) => Text('Granted', style: TextStyle(color: scheme.primary)),
+                (false, false) => Text(step.unavailableHint ?? '', style: TextStyle(color: scheme.outline)),
+                (false, true) => FilledButton(onPressed: step.onGrant, child: const Text('Grant')),
+              },
             ),
           ],
         ),
